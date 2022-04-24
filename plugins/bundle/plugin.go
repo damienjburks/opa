@@ -14,6 +14,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"sync"
 	"time"
 
@@ -375,6 +376,7 @@ func (p *Plugin) loadAndActivateBundlesFromDisk(ctx context.Context) {
 		numActivatedBundles := 0
 		for name, b := range persistedBundles {
 			p.status[name].Metrics = metrics.New()
+			p.status[name].Type = b.Type()
 
 			err := p.activate(ctx, name, b)
 			if err != nil {
@@ -419,6 +421,17 @@ func (p *Plugin) newDownloader(name string, source *Source) Loader {
 	callback := func(ctx context.Context, u download.Update) {
 		// wrap the callback to include the name of the bundle that was updated
 		p.oneShot(ctx, name, u)
+	}
+	if strings.ToLower(client.Config().Type) == "oci" {
+		ociStorePath := filepath.Join(os.TempDir(), "opa", "oci") // use temporary folder /tmp/opa/oci
+		if p.manager.Config.PersistenceDirectory != nil {
+			ociStorePath = filepath.Join(*p.manager.Config.PersistenceDirectory, "oci")
+		}
+		return download.NewOCI(conf, client, path, ociStorePath).
+			WithCallback(callback).
+			WithBundleVerificationConfig(source.Signing).
+			WithSizeLimitBytes(source.SizeLimitBytes).
+			WithBundlePersistence(p.persistBundle(name))
 	}
 	return download.New(conf, client, path).
 		WithCallback(callback).
@@ -474,6 +487,7 @@ func (p *Plugin) process(ctx context.Context, name string, u download.Update) {
 	p.status[name].LastSuccessfulRequest = p.status[name].LastRequest
 
 	if u.Bundle != nil {
+		p.status[name].Type = u.Bundle.Type()
 		p.status[name].LastSuccessfulDownload = p.status[name].LastSuccessfulRequest
 
 		p.status[name].Metrics.Timer(metrics.RegoLoadBundles).Start()
@@ -545,7 +559,7 @@ func (p *Plugin) checkPluginReadiness() {
 }
 
 func (p *Plugin) activate(ctx context.Context, name string, b *bundle.Bundle) error {
-	p.log(name).Debug("Bundle activation in progress. Opening storage transaction.")
+	p.log(name).Debug("Bundle activation in progress (%v). Opening storage transaction.", b.Manifest.Revision)
 
 	params := storage.WriteParams
 	params.Context = storage.NewContext().WithMetrics(p.status[name].Metrics)

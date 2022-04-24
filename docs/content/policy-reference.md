@@ -459,6 +459,7 @@ The following table shows examples of how ``glob.match`` works:
 
 | Built-in | Description | Wasm Support |
 | ------- |-------------|---------------|
+| <span class="opa-keep-it-together">``output := units.parse(x)``</span> | ``output`` is ``x`` converted to a number with support for standard metric decimal and binary SI units (e.g., K, Ki, M, Mi, G, Gi etc.) m, K, M, G, T, P, and E are treated as decimal units and Ki, Mi, Gi, Ti, Pi, and Ei are treated as binary units. Note that 'm' and 'M' are case-sensitive, to allow distinguishing between "milli" and "mega" units respectively. Other units are case-insensitive. | ``SDK-dependent`` |
 | <span class="opa-keep-it-together">``output := units.parse_bytes(x)``</span> | ``output`` is ``x`` converted to a number with support for standard byte units (e.g., KB, KiB, etc.) KB, MB, GB, and TB are treated as decimal units and KiB, MiB, GiB, and TiB are treated as binary units. The bytes symbol (b/B) in the unit is optional and omitting it wil give the same result (e.g. Mi and MiB) | ``SDK-dependent`` |
 
 ### Types
@@ -478,9 +479,9 @@ The following table shows examples of how ``glob.match`` works:
 
 | Built-in | Description | Wasm Support |
 | ------- |-------------|---------------|
-| <span class="opa-keep-it-together">``output := base64.encode(x)``</span> | ``output`` is ``x`` serialized to a base64 encoded string without padding | ✅ |
-| <span class="opa-keep-it-together">``output := base64.decode(string)``</span> | ``output`` is ``x`` deserialized from a base64 encoding string without padding | ✅ |
-| <span class="opa-keep-it-together">``output := base64url.encode(x)``</span> | ``output`` is ``x`` serialized to a base64url encoded string with padding | ✅ |
+| <span class="opa-keep-it-together">``output := base64.encode(x)``</span> | ``output`` is ``x`` serialized to a base64 encoded string | ✅ |
+| <span class="opa-keep-it-together">``output := base64.decode(string)``</span> | ``output`` is ``x`` deserialized from a base64 encoding string | ✅ |
+| <span class="opa-keep-it-together">``output := base64url.encode(x)``</span> | ``output`` is ``x`` serialized to a base64url encoded string | ✅ |
 | <span class="opa-keep-it-together">``output := base64url.encode_no_pad(x)``</span> | ``output`` is ``x`` serialized to a base64url encoded string without padding | ``SDK-dependent`` |
 | <span class="opa-keep-it-together">``output := base64url.decode(string)``</span> | ``output`` is ``string`` deserialized from a base64url encoded string with or without padding | ✅ |
 | <span class="opa-keep-it-together">``output := urlquery.encode(string)``</span> | ``output`` is URL query parameter encoded ``string`` | ``SDK-dependent`` |
@@ -1015,7 +1016,7 @@ The table below shows examples of calling `http.send`:
 | <span class="opa-keep-it-together">``output := net.cidr_contains_matches(cidrs, cidrs_or_ips)``</span> | `output` is a `set` of tuples identifying matches where `cidrs_or_ips` are contained within `cidrs`. This function is similar to `net.cidr_contains` except it allows callers to pass collections of CIDRs or IPs as arguments and returns the matches (as opposed to a boolean result indicating a match between two CIDRs/IPs.) See below for examples. | ``SDK-dependent`` |
 | <span class="opa-keep-it-together">``net.cidr_intersects(cidr1, cidr2)``</span> | `output` is `true` if `cidr1` (e.g. `192.168.0.0/16`) overlaps with `cidr2` (e.g. `192.168.1.0/24`) and false otherwise. Supports both IPv4 and IPv6 notations.| ✅ |
 | <span class="opa-keep-it-together">``net.cidr_expand(cidr)``</span> | `output` is the set of hosts in `cidr`  (e.g., `net.cidr_expand("192.168.0.0/30")` generates 4 hosts: `{"192.168.0.0", "192.168.0.1", "192.168.0.2", "192.168.0.3"}` | ``SDK-dependent`` |
-| <span class="opa-keep-it-together">``net.cidr_merge(cidrs_or_ips)``</span> | `output` is the smallest possible set of CIDRs obtained after merging the provided list of IP addresses and subnets in `cidrs_or_ips`  (e.g., `net.cidr_merge(["192.0.128.0/24", "192.0.129.0/24"])` generates `{"192.0.128.0/23"}`. This function merges adjacent subnets where possible, those contained within others and also removes any duplicates. Supports both IPv4 and IPv6 notations. | ``SDK-dependent`` |
+| <span class="opa-keep-it-together">``net.cidr_merge(cidrs_or_ips)``</span> | `output` is the smallest possible set of CIDRs obtained after merging the provided list of IP addresses and subnets in `cidrs_or_ips`  (e.g., `net.cidr_merge(["192.0.128.0/24", "192.0.129.0/24"])` generates `{"192.0.128.0/23"}`. This function merges adjacent subnets where possible, those contained within others and also removes any duplicates. Supports both IPv4 and IPv6 notations. IPv6 inputs need a prefix length (e.g. "/128"). | ``SDK-dependent`` |
 
 #### Notes on Name Resolution (`net.lookup_ip_addr`)
 
@@ -1099,12 +1100,60 @@ net.cidr_contains_matches({["1.1.0.0/16", "foo"], "1.1.2.0/24"}, {"x": "1.1.1.12
 | <span class="opa-keep-it-together">``output := rego.metadata.chain()``</span> | Each entry in the ``output`` array represents a node in the path ancestry (chain) of the active rule that also has declared [annotations](../annotations).``output`` is ordered starting at the active rule, going outward to the most distant node in its package ancestry. A chain entry is a JSON document with two members: ``path``, an array representing the path of the node; and ``annotations``, a JSON document containing the annotations declared for the node. The first entry in the chain always points to the active rule, even if it has no declared annotations (in which case the ``annotations`` member is not present). | ✅ |
 | <span class="opa-keep-it-together">``output := rego.metadata.rule()``</span> | Returns a JSON object ``output`` containing the set of [annotations](../annotations) declared for the active rule and using the `rule` [scope](../annotations#scope). If no annotations are declared, an empty object is returned. | ✅ |
 
+#### Example
+
+Given the input document
+
+```live:example/metadata/1:input
+{
+    "number": 11,
+    "subject": {
+        "name": "John doe",
+        "role": "customer"
+    }
+}
+```
+
+the following policy
+
+```live:example/metadata/1:module
+package example
+
+# METADATA
+# title: Deny invalid numbers
+# description: Numbers may not be higer than 5
+# custom:
+#  severity: MEDIUM
+deny[format(rego.metadata.rule())] {
+    input.number > 5
+}
+
+# METADATA
+# title: Deny non-admin subjects
+# description: Subject must have the 'admin' role
+# custom:
+#  severity: HIGH
+deny[format(rego.metadata.rule())] {
+    input.subject.role != "admin"
+}
+
+format(meta) := {"severity": meta.custom.severity, "reason": meta.description}
+```
+
+will output
+
+```live:example/metadata/1:query:merge_down
+deny
+```
+```live:example/metadata/1:output
+```
+
 #### Metadata Merge strategies
 
 When multiple [annotations](../annotations) are declared along the path ancestry (chain) for a rule, how any given annotation should be selected, inherited or merged depends on the semantics of the annotation, the context of the rule, and the preferences of the developer.
 OPA doesn't presume what merge strategy is appropriate; instead, this lies in the hands of the developer. The following example demonstrates how some string and list type annotations in a metadata chain can be merged into a single metadata object.
 
-```live:rego/metadata:query:read_only
+```live:rego/metadata:module:read_only
 # METADATA
 # title: My Example Package
 # description: A set of rules illustrating how metadata annotations can be merged.
