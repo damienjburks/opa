@@ -25,6 +25,10 @@ type formatIndexMap struct {
 var formatRE = regexp.MustCompile(`%(((\.[0-9]+)|([0-9]+)|([0-9]+\.[0-9]+))?(\[\d\])?([a-zA-Z]))`)
 var detectExpArgsRE = regexp.MustCompile(`%((\.[0-9]+)|([0-9]+)|([0-9]+\.[0-9]+))?(\[\d\]\w)`)
 var missingArgRE = regexp.MustCompile(`%\!\w{0,1}\(MISSING\)`)
+<<<<<<< HEAD
+=======
+var explicitIndexRE = regexp.MustCompile(`\[\d\]`)
+>>>>>>> 1c1c2890ae36f5c48e24f3ed7a440d2657bba7c3
 
 func builtinFormatInt(a, b ast.Value) (ast.Value, error) {
 
@@ -435,13 +439,12 @@ func builtinSprintf(a, b ast.Value) (ast.Value, error) {
 		return nil, builtins.NewOperandTypeErr(2, b, "array")
 	}
 
-	args := make([]interface{}, astArr.Len())
-
+	var args []interface{}
 	var formatStringArr []string
 	var explicitExprArr []string
 	var indexes []formatIndexMap
 
-	if len(args) > 0 {
+	if astArr.Len() > 0 {
 		formatStringArr = formatRE.FindAllString(s.String(), -1)
 		explicitExprArr = detectExpArgsRE.FindAllString(s.String(), -1)
 	}
@@ -479,58 +482,19 @@ func builtinSprintf(a, b ast.Value) (ast.Value, error) {
 					// Trim the parent format string (s) by removing the quotes
 					// and remove all of the explicit indexes from (s)
 					trimmedParentFmtString := s.String()[1 : len(s.String())-1]
-					formattedString := regexp.MustCompile(`\[\d\]`).ReplaceAllString(trimmedParentFmtString, "")
+					formattedString := explicitIndexRE.ReplaceAllString(trimmedParentFmtString, "")
+
 					s = ast.String(formattedString)
 
-					switch v := astArr.Elem(index.arrayIndex).Value.(type) {
-					case ast.Number:
-						// Format the numbers
-						if strings.Contains(formatString, "f") {
-							float, _ := v.Float64()
-							modifiedArgs = append(modifiedArgs, float)
-						} else {
-							if in, ok := v.Int(); ok {
-								modifiedArgs = append(modifiedArgs, in)
-							} else if bin, ok := new(big.Int).SetString(v.String(), 10); ok {
-								modifiedArgs = append(modifiedArgs, bin)
-							} else {
-								modifiedArgs = append(modifiedArgs, v.String())
-							}
-						}
-					case ast.String:
-						modifiedArgs = append(modifiedArgs, string(v))
-					default:
-						modifiedArgs = append(modifiedArgs, astArr.Elem(i).String())
-					}
-
+					modifiedArgs = builtinSprintfHelper(astArr, formatString, index.arrayIndex, modifiedArgs)
 					isFormatted = true
 					break
 				}
-
 				if isFormatted {
 					continue // Was an explicit index argument, skip :)
 				} else {
 					// Does not contain index, format as usual.
-					switch v := astArr.Elem(argsIndex).Value.(type) {
-					case ast.Number:
-						if strings.Contains(formatString, "f") {
-							float, _ := v.Float64()
-							modifiedArgs = append(modifiedArgs, float)
-						} else {
-							if in, ok := v.Int(); ok {
-								modifiedArgs = append(modifiedArgs, in)
-							} else if bin, ok := new(big.Int).SetString(v.String(), 10); ok {
-								modifiedArgs = append(modifiedArgs, bin)
-							} else {
-								modifiedArgs = append(modifiedArgs, v.String())
-							}
-						}
-					case ast.String:
-						modifiedArgs = append(modifiedArgs, string(v))
-					default:
-						modifiedArgs = append(modifiedArgs, astArr.Elem(i).String())
-					}
-
+					modifiedArgs = builtinSprintfHelper(astArr, formatString, argsIndex, modifiedArgs)
 					// Move the counter for the next number passed in
 					argsIndex++
 				}
@@ -542,27 +506,9 @@ func builtinSprintf(a, b ast.Value) (ast.Value, error) {
 
 	} else {
 		// No explicit details detected, currently parsing code now.
-		for i := range args {
-			formatString := ast.String(formatStringArr[i])
-			switch v := astArr.Elem(i).Value.(type) {
-			case ast.Number:
-				// Parse the numbers and see if they're equivalent to something
-				if strings.Contains(formatString.String(), "f") {
-					args[i], _ = v.Float64()
-				} else {
-					if in, ok := v.Int(); ok {
-						args[i] = in
-					} else if bin, ok := new(big.Int).SetString(v.String(), 10); ok {
-						args[i] = bin
-					} else {
-						args[i] = v.String()
-					}
-				}
-			case ast.String:
-				args[i] = string(v)
-			default:
-				args[i] = astArr.Elem(i).String()
-			}
+		for i := 0; i < astArr.Len(); i++ {
+			formatString := ast.String(formatStringArr[i]).String()
+			args = builtinSprintfHelper(astArr, formatString, i, args)
 		}
 
 		resultString = ast.String(fmt.Sprintf(string(s), args...))
@@ -576,6 +522,32 @@ func builtinSprintf(a, b ast.Value) (ast.Value, error) {
 	}
 
 	return resultString, nil
+}
+
+func builtinSprintfHelper(astArr *ast.Array, formatString string, index int, args []interface{}) []interface{} {
+	// Parse the numbers and see if they're equivalent to something
+	switch v := astArr.Elem(index).Value.(type) {
+	case ast.Number:
+		// Parse the numbers and see if they're equivalent to something
+		if strings.Contains(formatString, "f") {
+			floatingNumber, _ := v.Float64()
+			args = append(args, floatingNumber)
+		} else {
+			if in, ok := v.Int(); ok {
+				args = append(args, in)
+			} else if bin, ok := new(big.Int).SetString(v.String(), 10); ok {
+				args = append(args, bin)
+			} else {
+				args = append(args, v.String())
+			}
+		}
+	case ast.String:
+		args = append(args, string(v))
+	default:
+		args = append(args, astArr.Elem(index).String())
+	}
+
+	return args
 }
 
 func builtinReverse(bctx BuiltinContext, operands []*ast.Term, iter func(*ast.Term) error) error {
